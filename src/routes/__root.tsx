@@ -11,6 +11,9 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { QuantaraProvider } from "../lib/quantara/store";
+import { Splash } from "../components/quantara/Splash";
+import { Shell } from "../components/quantara/Shell";
 
 function NotFoundComponent() {
   return (
