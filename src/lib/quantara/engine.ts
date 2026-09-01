@@ -422,6 +422,7 @@ export async function synthesizeRecommendation(
       Moderate: PROFILE_TEXT.Moderate(recommendation, stock.symbol),
       Aggressive: PROFILE_TEXT.Aggressive(recommendation, stock.symbol),
     },
+    decision: buildSynthesisDecision(stock, agents, profile, conflict, health, portfolio),
     latency_ms: Date.now() - t0,
   };
 }
