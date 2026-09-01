@@ -11,6 +11,9 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { QuantaraProvider } from "../lib/quantara/store";
+import { Splash } from "../components/quantara/Splash";
+import { Shell } from "../components/quantara/Shell";
 
 function NotFoundComponent() {
   return (
@@ -119,8 +122,13 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <QuantaraProvider>
+        <Splash />
+        <Shell>
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+        </Shell>
+      </QuantaraProvider>
     </QueryClientProvider>
   );
 }
