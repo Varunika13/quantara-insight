@@ -1,5 +1,6 @@
 import { getDocumentsForStock, getStockData } from "./registry";
 import type {
+  AgentAgreement,
   AgentOutput,
   AgentSource,
   AnalysisSession,
