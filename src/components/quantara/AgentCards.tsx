@@ -155,6 +155,54 @@ export function SynthesisCard({
 
         <p className="text-sm leading-relaxed text-white/85">{synthesis.summary}</p>
 
+        {/* Final BUY / HOLD / AVOID decision */}
+        <div className="rounded-2xl border border-gold/40 bg-white/5 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span
+                className={cn(
+                  "font-display rounded-xl px-4 py-2 text-xl tracking-wide",
+                  synthesis.decision.final_verdict === "BUY"
+                    ? "bg-bull/20 text-bull"
+                    : synthesis.decision.final_verdict === "AVOID"
+                      ? "bg-bear/20 text-bear"
+                      : "bg-gold/15 text-gold",
+                )}
+              >
+                {synthesis.decision.final_verdict}
+              </span>
+              <div>
+                <p className="q-label text-white/60">Final Verdict · {synthesis.decision.stock_symbol}</p>
+                <p className="text-sm text-white/85">
+                  {synthesis.decision.confidence}% confidence · {synthesis.decision.agent_agreement}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-white/60">
+              Driven by {synthesis.decision.contributing_agents.join(" & ") || "no available agent"}
+            </p>
+          </div>
+
+          <p className="mt-4 text-sm leading-relaxed text-white/85">{synthesis.decision.justification}</p>
+
+          {synthesis.decision.risk_flags.length > 0 && (
+            <ul className="mt-4 space-y-1.5">
+              {synthesis.decision.risk_flags.map((f) => (
+                <li key={f} className="flex gap-2 text-xs text-white/70">
+                  <span className="text-gold">▲</span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {synthesis.decision.cited_sources.length > 0 && (
+            <p className="mt-4 text-xs text-white/50">Cited: {synthesis.decision.cited_sources.join(" · ")}</p>
+          )}
+
+          <p className="mt-3 text-xs italic text-white/45">{synthesis.decision.disclaimer}</p>
+        </div>
+
         <div className="rounded-2xl bg-white/5 p-4">
           <p className="q-label text-gold">Your selected profile: {profile}</p>
           <p className="mt-2 text-sm leading-relaxed text-white/85">{synthesis.risk_profile_explanation}</p>
