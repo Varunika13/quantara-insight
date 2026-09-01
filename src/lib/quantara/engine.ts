@@ -13,6 +13,7 @@ import type {
   RiskProfile,
   Signal,
   Stock,
+  SynthesisDecision,
   SynthesisOutput,
 } from "./types";
 
