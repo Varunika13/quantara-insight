@@ -7,6 +7,7 @@ import type {
   Classification,
   Conflict,
   DataHealth,
+  FinalVerdict,
   Holding,
   PortfolioRisk,
   RiskProfile,
