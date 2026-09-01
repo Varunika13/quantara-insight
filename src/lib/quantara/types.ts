@@ -88,6 +88,7 @@ export interface SynthesisOutput {
   what_would_change_this: string;
   sources: AgentSource[];
   perspectives: Record<RiskProfile, string>;
+  decision: SynthesisDecision;
   latency_ms: number;
 }
 
