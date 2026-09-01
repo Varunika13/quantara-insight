@@ -50,8 +50,8 @@ export interface Signal {
 export interface AgentSource {
   document: string;
   snippet: string;
-  type?: string;
-  relevance?: number;
+  type?: string | undefined;
+  relevance?: number | undefined;
 }
 
 export interface AgentOutput {
@@ -81,7 +81,7 @@ export interface DataHealth {
   fundamentals: boolean;
   sentiment: boolean;
   degraded: boolean;
-  note?: string;
+  note?: string | undefined;
 }
 
 export interface Conflict {
