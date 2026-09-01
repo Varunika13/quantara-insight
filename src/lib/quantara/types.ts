@@ -63,6 +63,21 @@ export interface AgentOutput {
   latency_ms: number;
 }
 
+export type FinalVerdict = "BUY" | "HOLD" | "AVOID";
+export type AgentAgreement = "Full Agreement" | "Partial Agreement" | "Conflicting";
+
+export interface SynthesisDecision {
+  stock_symbol: string;
+  final_verdict: FinalVerdict;
+  confidence: number;
+  justification: string;
+  agent_agreement: AgentAgreement;
+  contributing_agents: string[];
+  cited_sources: string[];
+  risk_flags: string[];
+  disclaimer: string;
+}
+
 export interface SynthesisOutput {
   agent_name: "QUANTARA Synthesis Agent";
   recommendation: "Bullish" | "Neutral" | "Bearish" | "Cautious Opportunity";
