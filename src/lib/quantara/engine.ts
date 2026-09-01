@@ -1,16 +1,19 @@
 import { getDocumentsForStock, getStockData } from "./registry";
 import type {
+  AgentAgreement,
   AgentOutput,
   AgentSource,
   AnalysisSession,
   Classification,
   Conflict,
   DataHealth,
+  FinalVerdict,
   Holding,
   PortfolioRisk,
   RiskProfile,
   Signal,
   Stock,
+  SynthesisDecision,
   SynthesisOutput,
 } from "./types";
 
@@ -253,6 +256,120 @@ const PROFILE_TEXT: Record<RiskProfile, (rec: string, sym: string) => string> = 
     `For your Aggressive profile, the current ${rec.toLowerCase()} signals may support stronger consideration, while volatility and market conditions should continue to be monitored and risk limits respected.`,
 };
 
+export const SYNTHESIS_DISCLAIMER =
+  "This is an AI-generated research aid, not financial advice. Past performance and model outputs do not guarantee future results.";
+
+/** Risk-profile weighting applied to each specialist agent. */
+const AGENT_WEIGHTS: Record<RiskProfile, Record<string, number>> = {
+  Conservative: { "Fundamentals Agent": 1.5, "Technical Agent": 0.9, "Sentiment Agent": 0.5 },
+  Moderate: { "Fundamentals Agent": 1, "Technical Agent": 1, "Sentiment Agent": 1 },
+  Aggressive: { "Fundamentals Agent": 0.8, "Technical Agent": 1.4, "Sentiment Agent": 1.3 },
+};
+
+/**
+ * Final BUY / HOLD / AVOID decision, reasoning strictly over the upstream agent outputs.
+ * Never fabricates agreement: material disagreement or low confidence forces HOLD.
+ */
+export function buildSynthesisDecision(
+  stock: Stock,
+  agents: AgentOutput[],
+  profile: RiskProfile,
+  conflict: Conflict | null,
+  health: DataHealth,
+  portfolio?: PortfolioRisk,
+): SynthesisDecision {
+  const valid = agents.filter((a) => a.verdict !== "Unavailable");
+  const missing = agents.filter((a) => a.verdict === "Unavailable");
+  const weights = AGENT_WEIGHTS[profile];
+
+  let weighted = 0;
+  let weightSum = 0;
+  for (const a of valid) {
+    const w = (weights[a.agent_name] ?? 1) * (a.confidence / 100);
+    weightSum += w;
+    weighted += w * (a.verdict === "Bullish" ? 1 : a.verdict === "Bearish" ? -1 : 0);
+  }
+  const netScore = weightSum ? weighted / weightSum : 0;
+
+  const distinct = new Set(valid.map((a) => a.verdict));
+  const hasOpposing = distinct.has("Bullish") && distinct.has("Bearish");
+  const agent_agreement: AgentAgreement =
+    distinct.size <= 1 ? "Full Agreement" : hasOpposing ? "Conflicting" : "Partial Agreement";
+
+  const avgConfidence = valid.length ? valid.reduce((a, b) => a + b.confidence, 0) / valid.length : 0;
+  const allLowConfidence = valid.length > 0 && valid.every((a) => a.confidence < 50);
+
+  let final_verdict: FinalVerdict = netScore >= 0.45 ? "BUY" : netScore <= -0.45 ? "AVOID" : "HOLD";
+
+  const risk_flags: string[] = [];
+  const holding = portfolio?.rows.find((r) => r.symbol === stock.symbol);
+  const sectorWeight = (portfolio?.rows ?? [])
+    .filter((r) => getStockData(r.symbol)?.sector === stock.sector)
+    .reduce((a, r) => a + r.allocation, 0);
+
+  if (agent_agreement === "Conflicting") risk_flags.push("Agents returned directly conflicting verdicts");
+  if (allLowConfidence) risk_flags.push("All agent confidence scores are below 50%");
+  for (const m of missing) risk_flags.push(`${m.agent_name} data unavailable or degraded`);
+  if (health.degraded) risk_flags.push(health.note ?? "Partial data coverage — confidence reduced");
+  if (holding && holding.allocation >= 15)
+    risk_flags.push(`High portfolio concentration: ${stock.symbol} is ${holding.allocation.toFixed(1)}% of holdings`);
+  if (sectorWeight >= 35) risk_flags.push(`High sector concentration in ${stock.sector} (${sectorWeight.toFixed(1)}%)`);
+  if ((portfolio?.score ?? 0) >= 55) risk_flags.push("Overall portfolio concentration score is High");
+  const weakSentiment = valid.find((a) => a.agent_name === "Sentiment Agent" && a.confidence < 55);
+  if (weakSentiment) risk_flags.push("Low confidence sentiment signal");
+
+  // Guardrail: never force a confident call through disagreement or thin data.
+  const forcedHold = agent_agreement === "Conflicting" || allLowConfidence || missing.length > 0;
+  if (forcedHold && final_verdict === "BUY") final_verdict = "HOLD";
+  if (forcedHold && final_verdict === "AVOID" && !allLowConfidence && agent_agreement === "Conflicting")
+    final_verdict = "HOLD";
+
+  // Confidence reflects agreement, not just an average.
+  const agreementFactor = agent_agreement === "Full Agreement" ? 1 : agent_agreement === "Partial Agreement" ? 0.8 : 0.55;
+  let confidence = avgConfidence * agreementFactor * (0.55 + 0.45 * Math.abs(netScore));
+  if (health.degraded) confidence -= 12;
+  confidence -= missing.length * 8;
+  if (allLowConfidence) confidence -= 10;
+  if (holding && holding.allocation >= 15) confidence -= 5;
+  confidence = clamp(Math.round(confidence));
+
+  const contributing_agents = [...valid]
+    .sort((a, b) => (weights[b.agent_name] ?? 1) * b.confidence - (weights[a.agent_name] ?? 1) * a.confidence)
+    .slice(0, 2)
+    .map((a) => a.agent_name);
+
+  const cited_sources = Array.from(new Set(agents.flatMap((a) => a.sources.map((s) => s.document)))).slice(0, 4);
+
+  const driver = valid.find((a) => a.agent_name === contributing_agents[0]);
+  const conflictSentence = conflict
+    ? ` ${conflict.message} QUANTARA resolved this by weighting each agent against your ${profile} profile rather than averaging the disagreement away.`
+    : ` The agents were broadly aligned (${agent_agreement.toLowerCase()}), which supports the stated confidence.`;
+  const concentrationSentence = holding
+    ? ` ${stock.symbol} already accounts for ${holding.allocation.toFixed(1)}% of your portfolio, so any incremental exposure raises concentration risk.`
+    : "";
+  const degradedSentence = health.degraded || missing.length ? " Part of the upstream data was missing or degraded, so confidence has been reduced accordingly." : "";
+
+  const justification =
+    `QUANTARA's final verdict on ${stock.symbol} (${stock.company_name}) is ${final_verdict} at ${confidence}% confidence.` +
+    ` The call was driven mainly by ${contributing_agents.join(" and ") || "no available agent"}${driver ? ` — ${driver.reasoning}` : ""}` +
+    conflictSentence +
+    concentrationSentence +
+    degradedSentence +
+    (cited_sources.length ? ` Traceable to: ${cited_sources[0]}.` : "");
+
+  return {
+    stock_symbol: stock.symbol,
+    final_verdict,
+    confidence,
+    justification,
+    agent_agreement,
+    contributing_agents,
+    cited_sources,
+    risk_flags,
+    disclaimer: SYNTHESIS_DISCLAIMER,
+  };
+}
+
 export async function synthesizeRecommendation(
   stock: Stock,
   signals: Signal[],
@@ -305,6 +422,7 @@ export async function synthesizeRecommendation(
       Moderate: PROFILE_TEXT.Moderate(recommendation, stock.symbol),
       Aggressive: PROFILE_TEXT.Aggressive(recommendation, stock.symbol),
     },
+    decision: buildSynthesisDecision(stock, agents, profile, conflict, health, portfolio),
     latency_ms: Date.now() - t0,
   };
 }

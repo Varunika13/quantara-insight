@@ -70,6 +70,21 @@ function seedSessions(): AnalysisSession[] {
         what_would_change_this: "New filings or a decisive change in momentum could shift this archived call.",
         sources: [],
         perspectives: { Conservative: "", Moderate: "", Aggressive: "" },
+        decision: {
+          stock_symbol: b.symbol,
+          final_verdict: (b.rec === "Bullish" ? "BUY" : b.rec === "Bearish" ? "AVOID" : "HOLD") as "BUY" | "HOLD" | "AVOID",
+          confidence: b.conflict ? Math.max(0, b.conf - 12) : b.conf,
+          justification: `Archived demo decision for ${stock.company_name}. Re-run the analysis on the Dashboard for the full agent-weighted justification.`,
+          agent_agreement: (b.conflict ? "Conflicting" : "Full Agreement") as "Full Agreement" | "Partial Agreement" | "Conflicting",
+          contributing_agents: b.conflict ? ["Fundamentals Agent"] : ["Fundamentals Agent", "Technical Agent"],
+          cited_sources: ["Archived demo filing extract"],
+          risk_flags: [
+            ...(b.conflict ? ["Agents returned directly conflicting verdicts"] : []),
+            ...(b.degraded ? ["Partial data coverage — confidence reduced"] : []),
+          ],
+          disclaimer:
+            "This is an AI-generated research aid, not financial advice. Past performance and model outputs do not guarantee future results.",
+        },
         latency_ms: 340,
       },
       conflict: b.conflict ? { agents: ["Technical Agent", "Fundamentals Agent"], message: "Archived session recorded conflicting agent verdicts." } : null,
